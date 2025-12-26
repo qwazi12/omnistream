@@ -25,6 +25,7 @@ class YtDlpEngine:
         self.ua = UserAgent()
         self.use_drive_api = use_drive_api
         # Use specific folder ID: https://drive.google.com/drive/folders/1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18
+        # STRICT ENFORCEMENT: Always fallback to this specific ID
         self.drive_folder_id = drive_folder_id or '1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18'
         
         # Initialize Drive API if enabled
@@ -43,6 +44,31 @@ class YtDlpEngine:
         """Send log message to callback"""
         if self.log_callback:
             self.log_callback(message, level)
+            
+    def _normalize_shorts_url(self, url: str) -> str:
+        """
+        Normalize YouTube Shorts channel URLs for yt-dlp compatibility
+        
+        Problem: https://youtube.com/@Channel/shorts is a tab page, not a playlist
+        Solution: Convert to /videos endpoint which yt-dlp can parse
+        
+        The Shorts filter (_is_short method) will then extract only vertical videos
+        """
+        if '/@' in url and '/shorts' in url:
+            # Extract channel handle
+            try:
+                channel_handle = url.split('/@')[1].split('/')[0]
+                
+                # Convert to videos page (yt-dlp can parse this)
+                # The _is_short() filter will extract only Shorts
+                normalized = f"https://www.youtube.com/@{channel_handle}/videos"
+                
+                self.log(f"🔄 Normalized Shorts URL: @{channel_handle}/videos", "INFO")
+                return normalized
+            except Exception:
+                return url
+        
+        return url
     
     def _is_short(self, info, incomplete):
         """
@@ -67,7 +93,7 @@ class YtDlpEngine:
         # 3. Fallback: If neither, it's a standard horizontal video -> Skip it.
         return "Skipping: Content is not a Short (Horizontal/Standard Format)"
     
-    def download(self, url: str, quality: str = 'best', mode: str = 'video', max_downloads: int = None) -> Tuple[bool, str]:
+    def download(self, url: str, quality: str = 'best', mode: str = 'video', max_downloads: int = None, date_after: str = None, date_before: str = None) -> Tuple[bool, str]:
         """
         Download using yt-dlp with optimal settings
         
@@ -80,6 +106,9 @@ class YtDlpEngine:
         Returns:
             (success: bool, message: str)
         """
+        # Normalize URL BEFORE processing
+        url = self._normalize_shorts_url(url)
+        
         self.log(f"Starting yt-dlp download: {url}")
         
         # Check for cookies.txt
@@ -125,6 +154,14 @@ class YtDlpEngine:
         if max_downloads and max_downloads > 0:
             ydl_opts['playlistend'] = max_downloads
             self.log(f"📊 Limiting to {max_downloads} most recent videos")
+            
+        # Add Date Range Filters
+        if date_after:
+            ydl_opts['dateafter'] = date_after.replace('-', '') # YYYYMMDD
+            self.log(f"📅 Filter: After {date_after}")
+        if date_before:
+            ydl_opts['datebefore'] = date_before.replace('-', '') # YYYYMMDD
+            self.log(f"📅 Filter: Before {date_before}")
         
         # Cookie injection (Stealth)
         if cookie_file and self.stealth_mode:
@@ -137,7 +174,10 @@ class YtDlpEngine:
             ydl_opts['match_filter'] = self._is_short
             
             # Ensure we get the best quality vertical stream merged
-            ydl_opts['format'] = 'bestvideo[height>width][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height>width]+bestaudio/best'
+            # Ensure we get the best quality vertical stream merged
+            # Removed [height>width] from format string as it causes syntax errors in some versions
+            # The _is_short match_filter logic handles the filtering
+            ydl_opts['format'] = 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'
             
         elif mode == 'audio':
             self.log("🎵 Audio-only mode")

@@ -244,6 +244,27 @@ class PlaywrightEngine:
                             f.write(chunk)
             
             self.log(f"✓ Saved: {filename}", "SUCCESS")
+            
+            # Drive API Upload Integration
+            # Strict enforcement of Folder ID 1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18
+            try:
+                from drive_api import GoogleDriveAPI
+                drive = GoogleDriveAPI()
+                folder_id = '1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18'
+                
+                self.log(f"📤 Uploading to Drive Folder ID: {folder_id}...", "INFO")
+                drive.upload_file(filepath, filename, folder_id)
+                self.log("✓ Uploaded to Google Drive", "SUCCESS")
+                
+                # Cleanup local file after upload
+                os.remove(filepath)
+                self.log("🧹 Cleaned up local file", "INFO")
+                
+            except ImportError:
+                 self.log("⚠️ Drive API not available for Playwright", "WARNING")
+            except Exception as e:
+                self.log(f"❌ Drive Upload Failed: {str(e)}", "ERROR")
+            
             return True
             
         except Exception as e:

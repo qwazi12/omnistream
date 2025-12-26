@@ -46,6 +46,7 @@ class OmniStreamApp(ctk.CTk):
         self.playwright_engine = None
         self.is_downloading = False
         self.download_thread = None
+        self.stop_download = False  # ADD THIS LINE
         self.use_drive_api_var = False  # Drive API toggle state
         
         # Current site tracking
@@ -409,12 +410,14 @@ class OmniStreamApp(ctk.CTk):
             command=self.toggle_drive_api
         )
         self.drive_api_checkbox.pack(side="left", padx=5)
-        self.drive_api_checkbox.select()  # Check by default
+        self.drive_api_checkbox.select()  # STRICT ENFORCEMENT: Checked by default
         
+        # Hardcoded ID for display
+        target_id = "1DQDRFQtl7fkgyXoP..."
         self.drive_api_status = ctk.CTkLabel(
             drive_api_frame,
-            text="✅ API Mode: Downloads → Temp → Drive → Cleanup",
-            font=("Arial", 9),
+            text=f"✅ Target ID: {target_id}",
+            font=("Arial", 9, "bold"),
             text_color="#00ff00"
         )
         self.drive_api_status.pack(side="left", padx=10)
@@ -546,6 +549,7 @@ class OmniStreamApp(ctk.CTk):
         color = color_map.get(level, "white")
         
         formatted = f"[{timestamp}] [{level}] {message}\n"
+        print(formatted, end='')  # Mirror to terminal
         
         self.console.configure(state="normal")
         self.console.insert("end", formatted)
@@ -596,7 +600,7 @@ class OmniStreamApp(ctk.CTk):
     def parse_ai_command(self):
         """Parse natural language command with AI and AUTO-START download"""
         
-        command = self.ai_command_input.get("1.0", "end-1c").strip()
+        command = self.ai_command_entry.get().strip()
         
         if not command:
             self.log("⚠️ No command entered", "WARNING")
@@ -622,8 +626,8 @@ class OmniStreamApp(ctk.CTk):
             
             # Apply configuration to UI
             if config.get('url'):
-                self.url_input.delete("1.0", "end")
-                self.url_input.insert("1.0", config['url'])
+                self.url_entry.delete("1.0", "end")
+                self.url_entry.insert("1.0", config['url'])
             
             # Set content type (mode)
             content_type = config.get('content_type', 'All Videos')
@@ -878,6 +882,8 @@ class OmniStreamApp(ctk.CTk):
     
     def download_worker(self, urls: list):
         """Background worker for downloads"""
+        self.stop_download = False  # Reset flag at start
+        
         total_urls = len(urls)
         self.log(f"Starting batch download: {total_urls} URL(s)")
         self.log("=" * 80)
@@ -886,6 +892,11 @@ class OmniStreamApp(ctk.CTk):
         failed_count = 0
         
         for idx, url in enumerate(urls, 1):
+            # Check stop flag FIRST
+            if self.stop_download:
+                self.log("❌ Download stopped by user", "WARNING")
+                break
+            
             if not self.is_downloading:
                 self.log("Download stopped by user", "WARNING")
                 break
@@ -936,16 +947,31 @@ class OmniStreamApp(ctk.CTk):
                     except:
                         pass
                     
-                    # Determine mode
                     if 'Shorts Only' in self.mode_var.get():
-                        mode = 'shorts_only'
-                    elif 'Audio Only' in self.mode_var.get():
-                        mode = 'audio'
+                        mode = "shorts_only"
+                    elif 'Audio' in self.mode_var.get():
+                        mode = "audio"
                     else:
-                        # Default: All Videos (Best Quality) - no filtering
-                        mode = 'video'
+                        mode = "video"
                     
-                    success, message = engine.download(url, quality, mode, max_downloads)
+                    # Date Filters from AI
+                    date_after = None
+                    date_before = None
+                    if self.current_ai_config:
+                        date_after = self.current_ai_config.get('date_from')
+                        date_before = self.current_ai_config.get('date_to')
+                        if date_after or date_before:
+                            self.log(f"📅 Applying date filters: {date_after or 'Any'} to {date_before or 'Any'}")
+                    
+                    success, message = engine.download(
+                        url, 
+                        quality=quality, 
+                        mode=mode, 
+                        max_downloads=max_downloads,
+                        date_after=date_after,
+                        date_before=date_before
+                    )
+
                 
                 elif engine_choice == "jdownloader":
                     if not self.jdownloader_engine:
@@ -1038,6 +1064,7 @@ class OmniStreamApp(ctk.CTk):
     def stop_download(self):
         """Stop download process"""
         self.is_downloading = False
+        self.stop_download = True
         self.log("Stopping downloads...", "WARNING")
         self.stop_btn.configure(state="disabled")
     

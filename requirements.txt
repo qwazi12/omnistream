@@ -1,0 +1,9 @@
+customtkinter>=5.2.0
+yt-dlp>=2023.12.0
+playwright>=1.40.0
+requests>=2.31.0
+fake-useragent>=1.4.0
+pillow>=10.0.0
+myjdapi>=0.1.0
+google-generativeai>=0.3.0
+python-dotenv>=1.0.0

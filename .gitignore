@@ -56,3 +56,6 @@ jdownloader_links.txt
 # AI Configuration
 .env
 ai_cache/
+
+# Google Drive API
+token.pickle

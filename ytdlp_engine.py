@@ -7,6 +7,8 @@ import yt_dlp
 import os
 import random
 import time
+import shutil
+import tempfile
 from datetime import datetime
 from fake_useragent import UserAgent
 from typing import Callable, Tuple, Optional
@@ -15,12 +17,27 @@ from typing import Callable, Tuple, Optional
 class YtDlpEngine:
     """Primary engine for video platforms with Shorts filtering"""
     
-    def __init__(self, output_path: str, progress_callback: Optional[Callable] = None, log_callback: Optional[Callable] = None, stealth_mode: bool = True):
+    def __init__(self, output_path: str, progress_callback: Optional[Callable] = None, log_callback: Optional[Callable] = None, stealth_mode: bool = True, use_drive_api: bool = False, drive_folder_id: str = None):
         self.output_path = output_path
         self.progress_callback = progress_callback
         self.log_callback = log_callback
         self.stealth_mode = stealth_mode
         self.ua = UserAgent()
+        self.use_drive_api = use_drive_api
+        # Use specific folder ID: https://drive.google.com/drive/folders/1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18
+        self.drive_folder_id = drive_folder_id or '1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18'
+        
+        # Initialize Drive API if enabled
+        self.drive_api = None
+        if self.use_drive_api:
+            try:
+                from drive_api import GoogleDriveAPI
+                self.drive_api = GoogleDriveAPI()
+                self.log("✓ Google Drive API initialized", "SUCCESS")
+                self.log(f"📁 Target folder ID: {self.drive_folder_id}", "INFO")
+            except Exception as e:
+                self.log(f"⚠️  Drive API initialization failed: {e}", "WARNING")
+                self.use_drive_api = False
         
     def log(self, message: str, level: str = "INFO"):
         """Send log message to callback"""
@@ -50,7 +67,7 @@ class YtDlpEngine:
         # 3. Fallback: If neither, it's a standard horizontal video -> Skip it.
         return "Skipping: Content is not a Short (Horizontal/Standard Format)"
     
-    def download(self, url: str, quality: str = 'best', mode: str = 'video') -> Tuple[bool, str]:
+    def download(self, url: str, quality: str = 'best', mode: str = 'video', max_downloads: int = None) -> Tuple[bool, str]:
         """
         Download using yt-dlp with optimal settings
         
@@ -58,6 +75,7 @@ class YtDlpEngine:
             url: URL to download
             quality: Quality preference (best, 1080p, 720p, audio)
             mode: Download mode (video, audio, shorts_only, bulk)
+            max_downloads: Maximum number of videos to download (for playlists/channels)
             
         Returns:
             (success: bool, message: str)
@@ -69,7 +87,7 @@ class YtDlpEngine:
         if cookie_file and self.stealth_mode:
             self.log("Using cookies.txt for authentication")
         
-        # Base Options
+        # Base Options with FFmpeg Integration
         ydl_opts = {
             # Output template: Creator/Title_VideoID.ext
             # This ensures: 1) Creator folders, 2) Original title, 3) Unique ID
@@ -82,8 +100,19 @@ class YtDlpEngine:
             'geo_bypass': True,
             'nocheckcertificate': True,
             'extract_flat': False,
-            'writeinfojson': True,  # Save metadata
-            'writethumbnail': True,  # Save thumbnail
+            
+            # DISABLED: Don't save extra files
+            'writeinfojson': False,  # Don't save .info.json
+            'writethumbnail': False,  # Don't save thumbnails
+            
+            # FFmpeg Integration: Merge video+audio into single MP4
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',  # Force MP4 container
+            'postprocessors': [{
+                'key': 'FFmpegVideoConvertor',
+                'preferedformat': 'mp4',  # Convert to MP4 if needed
+            }],
+            
             'http_headers': {
                 'User-Agent': self.ua.random,
                 'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -91,6 +120,11 @@ class YtDlpEngine:
                 'Sec-Fetch-Mode': 'navigate',
             }
         }
+        
+        # Add max downloads limit if specified
+        if max_downloads and max_downloads > 0:
+            ydl_opts['playlistend'] = max_downloads
+            self.log(f"📊 Limiting to {max_downloads} most recent videos")
         
         # Cookie injection (Stealth)
         if cookie_file and self.stealth_mode:
@@ -102,15 +136,11 @@ class YtDlpEngine:
             # Attach the custom Python filter defined above
             ydl_opts['match_filter'] = self._is_short
             
-            # Ensure we get the best quality vertical stream
-            ydl_opts['format'] = 'bestvideo[height>width]+bestaudio/best[height>width]/best'
-
-        # --- STANDARD VIDEO MODE ---
-        elif mode == "video" or mode == "auto":
-            ydl_opts['format'] = self._get_format_string(quality, mode)
-
-        # --- AUDIO ONLY MODE ---
-        elif mode == "audio":
+            # Ensure we get the best quality vertical stream merged
+            ydl_opts['format'] = 'bestvideo[height>width][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height>width]+bestaudio/best'
+            
+        elif mode == 'audio':
+            self.log("🎵 Audio-only mode")
             ydl_opts['format'] = 'bestaudio/best'
             ydl_opts['postprocessors'] = [{
                 'key': 'FFmpegExtractAudio',
@@ -126,13 +156,27 @@ class YtDlpEngine:
         
         # Execute download
         try:
+            # For Drive API mode: download to temp first
+            if self.use_drive_api and self.drive_api:
+                temp_dir = tempfile.mkdtemp(prefix='omnistream_')
+                ydl_opts['outtmpl'] = os.path.join(temp_dir, '%(title)s_%(id)s.%(ext)s')
+                self.log(f"📥 Downloading to temp: {temp_dir}")
+            else:
+                # Direct download to final destination
+                self.log(f"📥 Downloading directly to: {self.output_path}")
+            
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=True)
                 
                 if info:
                     title = info.get('title', 'Unknown')
-                    self.log(f"✓ Successfully downloaded: {title}", "SUCCESS")
-                    return True, f"Downloaded: {title}"
+                    
+                    # If using Drive API, upload and cleanup
+                    if self.use_drive_api and self.drive_api:
+                        return self._upload_to_drive(info, temp_dir)
+                    else:
+                        self.log(f"✓ Successfully downloaded: {title}", "SUCCESS")
+                        return True, f"Downloaded: {title}"
                 else:
                     return False, "Failed to extract video information"
                     
@@ -186,3 +230,105 @@ class YtDlpEngine:
         """Post-processor callback"""
         if d['status'] == 'finished':
             self.log("Post-processing completed")
+    
+    def _upload_to_drive(self, info: dict, temp_dir: str) -> Tuple[bool, str]:
+        """Upload downloaded file to Google Drive and cleanup"""
+        try:
+            # Get file info
+            title = info.get('title', 'Unknown')
+            uploader = info.get('uploader', 'Unknown')
+            video_id = info.get('id', '')
+            ext = info.get('ext', 'mp4')
+            
+            # Find downloaded file
+            filename = f"{title}_{video_id}.{ext}"
+            file_path = os.path.join(temp_dir, filename)
+            
+            # Find actual file if name doesn't match
+            if not os.path.exists(file_path):
+                files = [f for f in os.listdir(temp_dir) if f.endswith(f'.{ext}')]
+                if files:
+                    file_path = os.path.join(temp_dir, files[0])
+                    filename = files[0]
+            
+            if not os.path.exists(file_path):
+                self.log(f"✗ Downloaded file not found: {filename}", "ERROR")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False, "File not found after download"
+            
+            self.log(f"📤 Uploading to Google Drive...")
+            
+            # Use the configured folder ID directly (no navigation needed)
+            base_folder_id = self.drive_folder_id
+            
+            # Detect platform from URL
+            platform = self._detect_platform(info.get('webpage_url', ''))
+            
+            # Create platform folder inside base folder
+            platform_folder_id = self.drive_api.find_or_create_folder(base_folder_id, platform)
+            if not platform_folder_id:
+                self.log(f"✗ Failed to create platform folder: {platform}", "ERROR")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False, "Failed to create platform folder"
+            
+            # Get creator name with better fallbacks
+            creator = info.get('uploader') or info.get('channel') or info.get('uploader_id') or 'Unknown_Creator'
+            # Sanitize creator name (remove invalid chars)
+            creator = self._sanitize_folder_name(creator)
+            
+            # Create creator folder
+            creator_folder_id = self.drive_api.find_or_create_folder(platform_folder_id, creator)
+            if not creator_folder_id:
+                self.log(f"✗ Failed to create creator folder: {creator}", "ERROR")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False, "Failed to create creator folder"
+            
+            # Upload file
+            result = self.drive_api.upload_file(file_path, creator_folder_id, filename)
+            
+            if result:
+                self.log(f"✓ Uploaded to Drive: {result['name']}", "SUCCESS")
+                self.log(f"🔗 View: {result.get('webViewLink', 'N/A')}")
+                
+                # Cleanup temp directory
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                self.log("🗑️  Temp files cleaned up")
+                
+                return True, f"Uploaded to Drive: {title}"
+            else:
+                self.log("✗ Upload failed", "ERROR")
+                shutil.rmtree(temp_dir, ignore_errors=True)
+                return False, "Upload to Drive failed"
+        
+        except Exception as e:
+            self.log(f"✗ Drive upload error: {str(e)}", "ERROR")
+            if os.path.exists(temp_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            return False, f"Upload error: {str(e)}"
+    
+    def _detect_platform(self, url: str) -> str:
+        """Detect platform from URL"""
+        url_lower = url.lower()
+        if 'youtube.com' in url_lower or 'youtu.be' in url_lower:
+            return 'YouTube'
+        elif 'tiktok.com' in url_lower:
+            return 'TikTok'
+        elif 'instagram.com' in url_lower:
+            return 'Instagram'
+        elif 'twitter.com' in url_lower or 'x.com' in url_lower:
+            return 'Twitter'
+        else:
+            from urllib.parse import urlparse
+            domain = urlparse(url).netloc.replace('www.', '')
+            return f"Generic_Sites/{domain}"
+    
+    def _sanitize_folder_name(self, name: str) -> str:
+        """Remove invalid characters from folder name"""
+        # Remove characters that are invalid in folder names
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            name = name.replace(char, '_')
+        # Remove leading/trailing spaces and dots
+        name = name.strip('. ')
+        # Limit length
+        return name[:100] if name else 'Unknown'

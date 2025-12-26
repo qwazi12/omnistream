@@ -28,7 +28,7 @@ class OmniStreamApp(ctk.CTk):
         
         # Window configuration
         self.title("OmniStream Archiver - Triple Engine Downloader")
-        self.geometry("1000x800")
+        self.geometry("1000x1000")  # Increased height to fit all UI sections
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
         
@@ -46,6 +46,7 @@ class OmniStreamApp(ctk.CTk):
         self.playwright_engine = None
         self.is_downloading = False
         self.download_thread = None
+        self.use_drive_api_var = False  # Drive API toggle state
         
         # Current site tracking
         self.current_site_info = None
@@ -58,10 +59,10 @@ class OmniStreamApp(ctk.CTk):
         self.create_interpretation_panel()  # NEW: AI parsing results
         self.create_dynamic_filters_section()  # NEW: Site-aware filters
         self.create_settings_section()
+        self.create_status_bar()  # MOVED: Create before console so log() can access status_text
         self.create_console_section()
         self.create_progress_section()
         self.create_control_section()
-        self.create_status_bar()
         
         # Initialize JDownloader check
         self.after(1000, self.check_jdownloader_status)
@@ -231,21 +232,20 @@ class OmniStreamApp(ctk.CTk):
         edit_btn.pack(side="left", padx=5)
     
     def create_dynamic_filters_section(self):
-        """Create site-aware dynamic filter controls"""
-        self.filters_frame = ctk.CTkFrame(self)
-        # Initially hidden, shown based on site detection
-        
-        label = ctk.CTkLabel(
-            self.filters_frame,
-            text="🎯 CONTENT FILTERS",
-            font=("Arial", 13, "bold")
+        """Create dynamic site-aware filter options with SCROLLING"""
+        # Use scrollable frame to ensure all controls are accessible
+        self.filters_frame = ctk.CTkScrollableFrame(
+            self,
+            label_text="🎯 Dynamic Filters (Site-Aware)",
+            label_font=("Arial", 14, "bold"),
+            height=300  # Fixed height to enable scrolling
         )
-        label.pack(anchor="w", padx=10, pady=(10, 5))
+        self.filters_frame.pack(pady=10, padx=20, fill="both", expand=True)
         
-        # Site info display
+        # Site info label
         self.site_info_label = ctk.CTkLabel(
             self.filters_frame,
-            text="",
+            text="Paste a URL above to see site-specific options",
             font=("Arial", 10),
             text_color="gray"
         )
@@ -328,9 +328,39 @@ class OmniStreamApp(ctk.CTk):
         )
         quality_dropdown.grid(row=0, column=3, padx=10, pady=5)
         
+        # Max Downloads (NEW)
+        max_label = ctk.CTkLabel(settings_grid, text="Max Videos:", font=("Arial", 12, "bold"))
+        max_label.grid(row=0, column=4, padx=10, pady=5, sticky="e")
+        
+        self.max_downloads_entry = ctk.CTkEntry(
+            settings_grid,
+            placeholder_text="Leave empty for all",
+            width=120
+        )
+        self.max_downloads_entry.grid(row=0, column=5, padx=10, pady=5)
+        
+        # Format selector (NEW)
+        format_label = ctk.CTkLabel(settings_grid, text="Format:", font=("Arial", 12, "bold"))
+        format_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
+        
+        self.format_var = ctk.StringVar(value="Video + Audio (MP4)")
+        format_dropdown = ctk.CTkOptionMenu(
+            settings_grid,
+            variable=self.format_var,
+            values=[
+                "Video + Audio (MP4)",
+                "Video Only (MP4)",
+                "Audio Only (MP3)",
+                "Audio Only (M4A)",
+                "Best Available (Auto)"
+            ],
+            width=200
+        )
+        format_dropdown.grid(row=1, column=1, padx=10, pady=5)
+        
         # Engine override
         engine_label = ctk.CTkLabel(settings_grid, text="Engine:", font=("Arial", 12, "bold"))
-        engine_label.grid(row=1, column=0, padx=10, pady=5, sticky="e")
+        engine_label.grid(row=1, column=2, padx=10, pady=5, sticky="e")
         
         self.engine_var = ctk.StringVar(value="Auto-Detect")
         engine_dropdown = ctk.CTkOptionMenu(
@@ -339,7 +369,58 @@ class OmniStreamApp(ctk.CTk):
             values=["Auto-Detect", "Force yt-dlp", "Force JDownloader", "Force Playwright"],
             width=180
         )
-        engine_dropdown.grid(row=1, column=1, padx=10, pady=5)
+        engine_dropdown.grid(row=1, column=3, padx=10, pady=5)
+        
+        # START DOWNLOAD button (moved here for visibility)
+        self.start_btn = ctk.CTkButton(
+            settings_grid,
+            text="▶ START DOWNLOAD",
+            command=self.start_download,
+            width=200,
+            height=40,
+            fg_color="#00aa00",
+            hover_color="#008800",
+            font=("Arial", 14, "bold")
+        )
+        self.start_btn.grid(row=2, column=1, columnspan=2, padx=10, pady=5)
+        
+        # STOP button (also inline)
+        self.stop_btn = ctk.CTkButton(
+            settings_grid,
+            text="⏹ STOP",
+            command=self.stop_download,
+            width=100,
+            height=40,
+            fg_color="#cc0000",
+            hover_color="#aa0000",
+            font=("Arial", 12, "bold"),
+            state="disabled"
+        )
+        self.stop_btn.grid(row=0, column=4, padx=10, pady=5)
+        
+        # Drive API Toggle (NEW) - DEFAULT ENABLED
+        drive_api_frame = ctk.CTkFrame(settings_frame, fg_color="transparent")
+        drive_api_frame.pack(pady=(5, 0), padx=10)
+        
+        self.drive_api_checkbox = ctk.CTkCheckBox(
+            drive_api_frame,
+            text="📤 Upload via Google Drive API (for shared folders)",
+            font=("Arial", 11),
+            command=self.toggle_drive_api
+        )
+        self.drive_api_checkbox.pack(side="left", padx=5)
+        self.drive_api_checkbox.select()  # Check by default
+        
+        self.drive_api_status = ctk.CTkLabel(
+            drive_api_frame,
+            text="✅ API Mode: Downloads → Temp → Drive → Cleanup",
+            font=("Arial", 9),
+            text_color="#00ff00"
+        )
+        self.drive_api_status.pack(side="left", padx=10)
+        
+        # Set initial state
+        self.use_drive_api_var = True
     
     def create_console_section(self):
         """Create live console log"""
@@ -508,42 +589,77 @@ class OmniStreamApp(ctk.CTk):
         # Start download in background thread
         self.download_thread = threading.Thread(
             target=self.download_worker,
-            args=(urls,),
-            daemon=True
+            args=(urls,)
         )
         self.download_thread.start()
     
     def parse_ai_command(self):
-        """Parse natural language command with AI"""
-        command = self.ai_command_entry.get() if hasattr(self, 'ai_command_entry') else ""
-        url = self.url_entry.get("1.0", "end").strip()
+        """Parse natural language command with AI and AUTO-START download"""
         
-        if not command and not url:
-            self.log("Please provide either an AI command or a URL", "ERROR")
+        command = self.ai_command_input.get("1.0", "end-1c").strip()
+        
+        if not command:
+            self.log("⚠️ No command entered", "WARNING")
             return
         
-        self.log("🤖 Parsing command with AI...")
+        self.log(f"🤖 Parsing command: {command}", "INFO")
         
-        # Detect site if URL provided
-        site_info = None
-        if url:
-            site_info = SiteDetector.detect_site(url)
-            self.current_site_info = site_info
+        # Detect URL from command
+        import re
+        url_pattern = r'https?://[^\s]+'
+        urls = re.findall(url_pattern, command)
+        detected_url = urls[0] if urls else None
         
         # Parse with AI
         try:
-            config = self.ai_parser.parse_command(command, url, site_info)
-            self.current_ai_config = config
+            config = self.ai_parser.parse_command(command, detected_url)
             
-            # Display interpretation
-            self.show_interpretation(config)
+            confidence = config.get('confidence', 0)
+            interpretation = config.get('interpretation', 'Unknown')
             
-            # Update filters based on site
-            if site_info:
-                self.update_filters_for_site(site_info)
+            self.log(f"📊 Confidence: {confidence}%", "INFO")
+            self.log(f"💡 Interpretation: {interpretation}", "INFO")
             
+            # Apply configuration to UI
+            if config.get('url'):
+                self.url_input.delete("1.0", "end")
+                self.url_input.insert("1.0", config['url'])
+            
+            # Set content type (mode)
+            content_type = config.get('content_type', 'All Videos')
+            if 'Shorts' in content_type:
+                self.mode_var.set("Shorts Only (Vertical Filter)")
+            elif 'Audio' in content_type:
+                self.mode_var.set("Audio Only (MP3)")
+            else:
+                self.mode_var.set("All Videos (Best Quality)")
+            
+            # Set max downloads
+            if config.get('count'):
+                self.max_downloads_entry.delete(0, "end")
+                self.max_downloads_entry.insert(0, str(config['count']))
+            
+            # Set quality
+            quality = config.get('quality', 'Best Available')
+            self.quality_var.set(quality)
+            
+            # Show success
+            self.log(f"✅ Configuration applied!", "SUCCESS")
+            
+            # 🚀 AUTO-START DOWNLOAD if confidence is high enough
+            if confidence >= 70 and config.get('url'):
+                self.log(f"🚀 Auto-starting download (confidence: {confidence}%)", "SUCCESS")
+                # Wait a moment for UI to update
+                self.after(500, self.start_download)
+            else:
+                if confidence < 70:
+                    self.log(f"⚠️ Low confidence ({confidence}%) - please review settings and click START manually", "WARNING")
+                if not config.get('url'):
+                    self.log(f"⚠️ No URL detected - please paste URL and click START", "WARNING")
+        
         except Exception as e:
-            self.log(f"AI parsing failed: {str(e)}", "ERROR")
+            self.log(f"❌ AI parsing failed: {str(e)}", "ERROR")
+            self.log(f"💡 Try using manual settings instead", "INFO")
     
     def show_interpretation(self, config: dict):
         """Display AI interpretation results"""
@@ -584,7 +700,45 @@ class OmniStreamApp(ctk.CTk):
         self.interpretation_text.insert("1.0", interpretation)
         self.interpretation_text.configure(state="disabled")
         
-        self.log(f"✓ AI parsed with {config.get('confidence', 0)}% confidence", "SUCCESS")
+        confidence = config.get('confidence', 0)
+        self.log(f"✓ AI parsed with {confidence}% confidence", "SUCCESS")
+        
+        # Apply configuration to UI
+        url = config.get('url')
+        if url:
+            # Fill URL field
+            self.url_entry.delete("1.0", "end")
+            self.url_entry.insert("1.0", url)
+            self.log(f"📎 URL extracted: {url}", "INFO")
+        
+        # Set max downloads
+        max_downloads = config.get('max_downloads') or config.get('count')
+        if max_downloads:
+            if hasattr(self, 'max_downloads_entry'):
+                self.max_downloads_entry.delete(0, "end")
+                self.max_downloads_entry.insert(0, str(max_downloads))
+                self.log(f"📊 Max videos: {max_downloads}", "INFO")
+        
+        # Set mode based on content type
+        content_type = config.get('content_type', 'All Videos')
+        if 'Shorts' in content_type:
+            self.mode_var.set("Shorts Only (Vertical Filter)")
+            self.log(f"🎬 Mode: Shorts Only", "INFO")
+        elif 'Audio' in content_type:
+            self.mode_var.set("Audio Only (MP3)")
+            self.log(f"🎵 Mode: Audio Only", "INFO")
+        
+        self.log("✓ AI configuration accepted", "SUCCESS")
+        
+        # 🚀 AUTO-START if confidence is good and URL is present
+        if confidence >= 60 and url:
+            self.log(f"🚀 Auto-starting download...", "SUCCESS")
+            # Start download after a brief delay
+            self.after(1000, self.start_download)
+        elif not url:
+            self.log("⚠️ No URL detected - please paste URL in the URL field", "WARNING")
+        else:
+            self.log(f"⚠️ Low confidence ({confidence}%) - review settings and click START manually", "WARNING")
     
     def detect_url_and_update_ui(self, event=None):
         """Detect URL and update UI dynamically"""
@@ -765,8 +919,22 @@ class OmniStreamApp(ctk.CTk):
             
             try:
                 if engine_choice == "yt-dlp":
-                    engine = YtDlpEngine(output_path, self.update_progress, self.log)
+                    engine = YtDlpEngine(
+                        output_path,
+                        self.update_progress,
+                        self.log,
+                        use_drive_api=self.use_drive_api_var
+                    )
                     quality = self.get_quality_mapping()
+                    
+                    # Get max downloads if specified
+                    max_downloads = None
+                    try:
+                        max_text = self.max_downloads_entry.get().strip()
+                        if max_text:
+                            max_downloads = int(max_text)
+                    except:
+                        pass
                     
                     # Determine mode
                     if 'Shorts Only' in self.mode_var.get():
@@ -777,7 +945,7 @@ class OmniStreamApp(ctk.CTk):
                         # Default: All Videos (Best Quality) - no filtering
                         mode = 'video'
                     
-                    success, message = engine.download(url, quality, mode)
+                    success, message = engine.download(url, quality, mode, max_downloads)
                 
                 elif engine_choice == "jdownloader":
                     if not self.jdownloader_engine:
@@ -837,9 +1005,8 @@ class OmniStreamApp(ctk.CTk):
             domain = urlparse(url).netloc.replace('www.', '')
             platform = f"Generic_Sites/{domain}"
         
-        # Create year-month folder
-        year_month = datetime.now().strftime("%Y-%m")
-        folder_path = os.path.join(self.base_path, platform, year_month)
+        # Create platform folder (NO date-based subfolders)
+        folder_path = os.path.join(self.base_path, platform)
         os.makedirs(folder_path, exist_ok=True)
         
         return folder_path
@@ -881,6 +1048,23 @@ class OmniStreamApp(ctk.CTk):
         self.current_progress.set(0)
         self.current_label.configure(text="No active download")
         self.is_downloading = False
+    
+    def toggle_drive_api(self):
+        """Toggle Google Drive API mode"""
+        self.use_drive_api_var = self.drive_api_checkbox.get()
+        
+        if self.use_drive_api_var:
+            self.drive_api_status.configure(
+                text="✅ API Mode: Downloads → Temp → Drive → Cleanup",
+                text_color="#00ff00"
+            )
+            self.log("📤 Drive API mode enabled - uploads will go directly to shared folder", "SUCCESS")
+        else:
+            self.drive_api_status.configure(
+                text="",
+                text_color="gray"
+            )
+            self.log("Local storage mode - files save to Google Drive mount", "INFO")
 
 
 # Main application entry point

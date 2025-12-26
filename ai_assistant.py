@@ -20,11 +20,31 @@ class AIAssistant:
     def __init__(self):
         self.api_key = os.getenv('GEMINI_API_KEY')
         self.enabled = os.getenv('AI_ENABLED', 'true').lower() == 'true'
-        self.model_name = os.getenv('AI_MODEL', 'gemini-1.5-flash')
         
         if self.enabled and self.api_key:
             genai.configure(api_key=self.api_key)
-            self.model = genai.GenerativeModel(self.model_name)
+            
+            # Try models in order of preference
+            model_names = [
+                'gemini-3-flash',           # Latest and fastest
+                'gemini-2.5-flash',         # Stable fallback
+                'gemini-flash-latest',      # Auto-updating
+                'gemini-2.0-flash'          # Older but reliable
+            ]
+            
+            self.model = None
+            for model_name in model_names:
+                try:
+                    self.model = genai.GenerativeModel(model_name)
+                    print(f"[INFO] Using Gemini model: {model_name}")
+                    break
+                except Exception as e:
+                    print(f"[WARNING] Model {model_name} not available: {e}")
+                    continue
+            
+            if not self.model:
+                print("[ERROR] No Gemini models available")
+                self.enabled = False
         else:
             self.model = None
     
@@ -120,12 +140,34 @@ Return ONLY valid JSON, no markdown formatting."""
             return validated
             
         except Exception as e:
+            print(f"[ERROR] AI parsing failed: {str(e)}")
+            # Return fallback with extracted URL
+            import re
+            urls = re.findall(r'https?://[^\s]+', user_input)
+            extracted_url = urls[0] if urls else detected_url
+            
+            # Try to extract count from text
+            numbers = re.findall(r'\b(\d+)\b', user_input)
+            count = int(numbers[0]) if numbers else None
+            
+            # Detect content type
+            content_type = 'All Videos'
+            if 'short' in user_input.lower():
+                content_type = 'Shorts Only'
+            elif 'reel' in user_input.lower():
+                content_type = 'Reels Only'
+            
             return {
+                'url': extracted_url,
+                'content_type': content_type,
+                'scope': 'Latest N Videos' if count else 'All Videos',
+                'max_downloads': count,
+                'quality': 'Best Available',
+                'interpretation': f'Fallback parse: {content_type}' + (f', {count} videos' if count else ''),
+                'confidence': 60,
                 'error': str(e),
                 'fallback': True,
-                'interpretation': f"AI parsing failed: {str(e)}. Using manual configuration.",
-                'confidence': 0,
-                'needs_clarification': True
+                'needs_clarification': not extracted_url
             }
     
     def _validate_and_enhance(self, config: Dict, detected_url: str, site_info: Dict) -> Dict:

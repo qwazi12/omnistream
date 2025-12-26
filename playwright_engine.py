@@ -227,6 +227,9 @@ class PlaywrightEngine:
             if not filename:
                 filename = self._extract_filename(url)
             
+            # Sanitize filename
+            filename = self._sanitize_filename(filename)
+            
             filepath = os.path.join(self.output_path, filename)
             
             self.log(f"Downloading: {filename}")
@@ -246,3 +249,10 @@ class PlaywrightEngine:
         except Exception as e:
             self.log(f"✗ Failed to download {filename}: {str(e)}", "ERROR")
             return False
+    
+    def _sanitize_filename(self, filename: str) -> str:
+        """Remove invalid characters from filename"""
+        invalid_chars = '<>:"/\\|?*'
+        for char in invalid_chars:
+            filename = filename.replace(char, '_')
+        return filename[:255]  # Max filename length

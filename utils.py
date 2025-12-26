@@ -45,8 +45,13 @@ def detect_google_drive() -> Tuple[bool, str]:
                     f.write("test")
                 os.remove(test_file)
                 
-                # Success! Create base path
-                base_path = os.path.join(path, "OmniStream_Downloads")
+                # Success! Create custom base path
+                base_path = os.path.join(
+                    path,
+                    "KY Media Content",
+                    "Screen Central",
+                    "Travis"
+                )
                 os.makedirs(base_path, exist_ok=True)
                 return True, base_path
             except (PermissionError, OSError):

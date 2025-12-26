@@ -1,0 +1,23 @@
+{
+    "storage": {
+        "google_drive_subfolder": "KY Media Content/Screen Central/Travis",
+        "use_date_folders": false,
+        "folder_structure": "{platform}/{creator}"
+    },
+    "download": {
+        "default_format": "Video + Audio (MP4)",
+        "merge_audio_video": true,
+        "ffmpeg_required": true,
+        "save_metadata": false,
+        "save_thumbnails": false
+    },
+    "output": {
+        "template": "%(uploader)s/%(title)s_%(id)s.%(ext)s",
+        "sanitize_filenames": true
+    },
+    "anti_detection": {
+        "stealth_mode": true,
+        "random_delays": true,
+        "use_cookies": true
+    }
+}

@@ -12,6 +12,7 @@ import tempfile
 from datetime import datetime
 from fake_useragent import UserAgent
 from typing import Callable, Tuple, Optional
+from database import get_history
 
 
 class YtDlpEngine:
@@ -110,6 +111,19 @@ class YtDlpEngine:
         url = self._normalize_shorts_url(url)
         
         self.log(f"Starting yt-dlp download: {url}")
+        
+        # Get video info first to check if already downloaded
+        try:
+            with yt_dlp.YoutubeDL({'quiet': True, 'no_warnings': True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                video_id = info.get('id')
+                
+                # Check duplicate detection database
+                if video_id and get_history().is_downloaded(video_id):
+                    self.log(f"⏭️  Skipping: Already downloaded (ID: {video_id})", "WARNING")
+                    return True, f"Video already in history: {info.get('title', 'Unknown')}"
+        except Exception as e:
+            self.log(f"Could not pre-check video info: {e}", "WARNING")
         
         # Check for cookies.txt
         cookie_file = 'cookies.txt' if os.path.exists('cookies.txt') else None
@@ -210,6 +224,23 @@ class YtDlpEngine:
                 
                 if info:
                     title = info.get('title', 'Unknown')
+                    
+                    # Record in download history database
+                    try:
+                        video_info_db = {
+                            'video_id': info.get('id'),
+                            'title': info.get('title'),
+                            'channel_name': info.get('uploader') or info.get('channel'),
+                            'url': info.get('webpage_url') or url,
+                            'file_path': info.get('_filename'),
+                            'file_size': os.path.getsize(info.get('_filename')) if info.get('_filename') and os.path.exists(info.get('_filename')) else 0,
+                            'platform': 'YouTube' if 'youtube' in url else 'Unknown',
+                            'format': info.get('ext'),
+                            'duration': info.get('duration')
+                        }
+                        get_history().add_to_history(video_info_db)
+                    except Exception as e:
+                        self.log(f"Warning: Could not add to history: {e}", "WARNING")
                     
                     # If using Drive API, upload and cleanup
                     if self.use_drive_api and self.drive_api:

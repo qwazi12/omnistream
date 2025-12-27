@@ -65,8 +65,9 @@ class OmniStreamApp(ctk.CTk):
         self.create_progress_section()
         self.create_control_section()
         
-        # Initialize JDownloader check
-        self.after(1000, self.check_jdownloader_status)
+        # Schedule JDownloader status check
+        self.jdownloader_engine = JDownloaderEngine(self.base_path, self.log)        
+        self.after(1000, self.check_jd_status)
     
     def create_header(self):
         """Create header with title and status"""
@@ -100,7 +101,39 @@ class OmniStreamApp(ctk.CTk):
             font=("Arial", 11),
             text_color=status_color
         )
-        self.storage_status.pack()
+        self.storage_status.pack(pady=(5, 0))
+        
+        # Download History Stats (NEW)
+        try:
+            from database import get_history
+            stats = get_history().get_stats()
+            history_text = f"📊 Downloaded: {stats['total_downloads']} videos ({stats['total_size_gb']:.1f}GB)"
+        except:
+            history_text = "📊 Downloaded: 0 videos (0GB)"
+        
+        self.history_stats_label = ctk.CTkLabel(
+            header_frame,
+            text=history_text,
+            font=("Arial", 10),
+            text_color="#00ccff"
+        )
+        self.history_stats_label.pack(pady=(2, 5))
+        
+        # Storage Stats (NEW)
+        try:
+            from storage_utils import get_storage_stats, format_storage_display
+            stats = get_storage_stats()
+            storage_text = format_storage_display(stats)
+        except:
+            storage_text = "💾 Storage: checking..."
+        
+        self.storage_stats_label = ctk.CTkLabel(
+            header_frame,
+            text=storage_text,
+            font=("Arial", 10),
+            text_color="#00ccff"
+        )
+        self.storage_stats_label.pack(pady=(2, 5))
         
         # Engine status frame
         engine_frame = ctk.CTkFrame(header_frame, fg_color="transparent")
@@ -422,6 +455,22 @@ class OmniStreamApp(ctk.CTk):
         )
         self.drive_api_status.pack(side="left", padx=10)
         
+        # Auth Mode Indicator (NEW)
+        if os.path.exists('service_account.json'):
+            auth_text = "🔑 Pro Mode"
+            auth_color = "#00ff00"
+        else:
+            auth_text = "👤 User Mode"
+            auth_color = "#ffaa00"
+        
+        self.auth_mode_label = ctk.CTkLabel(
+            drive_api_frame,
+            text=auth_text,
+            font=("Arial", 9),
+            text_color=auth_color
+        )
+        self.auth_mode_label.pack(side="left", padx=5)
+        
         # Set initial state
         self.use_drive_api_var = True
     
@@ -526,14 +575,32 @@ class OmniStreamApp(ctk.CTk):
         )
         self.status_text.pack(side="left", padx=10)
     
-    def check_jdownloader_status(self):
-        """Check if JDownloader is running"""
-        self.jdownloader_engine = JDownloaderEngine(self.base_path, self.log)
-        
-        if self.jdownloader_engine.jd_connected:
+    def check_jd_status(self):
+        """Check if JDownloader is reachable"""
+        if self.jdownloader_engine and self.jdownloader_engine.jd_connected:
             self.jd_status.configure(text="📦 JDownloader: Connected", text_color="#00ff00")
         else:
             self.jd_status.configure(text="📦 JDownloader: Not Running", text_color="#ff6600")
+    
+    def update_history_stats(self):
+        """Update download history statistics display"""
+        try:
+            from database import get_history
+            stats = get_history().get_stats()
+            history_text = f"📊 Downloaded: {stats['total_downloads']} videos ({stats['total_size_gb']:.1f}GB)"
+            self.history_stats_label.configure(text=history_text)
+        except Exception as e:
+            self.log(f"Could not update history stats: {e}", "WARNING")
+    
+    def update_storage_stats(self):
+        """Update storage statistics display"""
+        try:
+            from storage_utils import get_storage_stats, format_storage_display
+            stats = get_storage_stats()
+            storage_text = format_storage_display(stats)
+            self.storage_stats_label.configure(text=storage_text, text_color=stats['color'])
+        except Exception as e:
+            self.log(f"Could not update storage stats: {e}", "WARNING")
     
     def log(self, message: str, level: str = "INFO"):
         """Add message to console with timestamp"""
@@ -1006,6 +1073,12 @@ class OmniStreamApp(ctk.CTk):
         self.log("=" * 80)
         self.log(f"Batch download complete: {success_count} succeeded, {failed_count} failed")
         self.log("=" * 80)
+        
+        # Update history statistics display
+        self.update_history_stats()
+        
+        # Update storage statistics display
+        self.update_storage_stats()
         
         self.overall_progress.set(1.0)
         self.overall_label.configure(text=f"Complete: {success_count}/{total_urls} successful")

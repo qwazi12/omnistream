@@ -57,5 +57,22 @@ jdownloader_links.txt
 .env
 ai_cache/
 
-# Google Drive API
+# OAuth tokens (sensitive)
 token.pickle
+credentials.json
+
+# Service account credentials (sensitive)
+service_account.json
+*.key.json
+
+# Database files
+omnistream_history.db
+videos.db
+
+# Cookies
+cookies.txt
+*cookies.txt
+
+# Server/web client folders (development)
+server/
+web-client/

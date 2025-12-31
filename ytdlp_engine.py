@@ -50,25 +50,10 @@ class YtDlpEngine:
         """
         Normalize YouTube Shorts channel URLs for yt-dlp compatibility
         
-        Problem: https://youtube.com/@Channel/shorts is a tab page, not a playlist
-        Solution: Convert to /videos endpoint which yt-dlp can parse
-        
-        The Shorts filter (_is_short method) will then extract only vertical videos
+        DISABLED: yt-dlp can now natively handle @channel/shorts URLs
+        Just pass through the URL unchanged
         """
-        if '/@' in url and '/shorts' in url:
-            # Extract channel handle
-            try:
-                channel_handle = url.split('/@')[1].split('/')[0]
-                
-                # Convert to videos page (yt-dlp can parse this)
-                # The _is_short() filter will extract only Shorts
-                normalized = f"https://www.youtube.com/@{channel_handle}/videos"
-                
-                self.log(f"🔄 Normalized Shorts URL: @{channel_handle}/videos", "INFO")
-                return normalized
-            except Exception:
-                return url
-        
+        # Let yt-dlp handle the URL natively
         return url
     
     def _is_short(self, info, incomplete):
@@ -184,8 +169,10 @@ class YtDlpEngine:
         # --- SHORTS MODE LOGIC ---
         if mode == "shorts_only":
             self.log("Mode: Shorts Only (filtering vertical content)")
-            # Attach the custom Python filter defined above
-            ydl_opts['match_filter'] = self._is_short
+            # DISABLED: If using /shorts tab URL, yt-dlp already filters to Shorts
+            # The match_filter was too strict and rejected valid Shorts
+            # Rely on the /shorts tab URL to provide only Shorts
+            # ydl_opts['match_filter'] = self._is_short
             
             # Ensure we get the best quality vertical stream merged
             # Ensure we get the best quality vertical stream merged

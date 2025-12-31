@@ -76,3 +76,27 @@ cookies.txt
 # Server/web client folders (development)
 server/
 web-client/
+
+# Credentials and tokens
+service_account.json
+youtube_credentials.json
+youtube_token.pickle
+facebook_config.json
+sheets_config.json
+credentials.json
+credentials.json.json
+
+# Cookies
+cookies.txt
+cookies.txt.bak
+Instagramcookies.txt
+
+# Temporary files
+reel_urls_*.txt
+urls.txt
+*.pickle
+
+# Downloaded content
+downloads/
+temp/
+*_temp/

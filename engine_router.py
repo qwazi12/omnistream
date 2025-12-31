@@ -1,3 +1,4 @@
+```
 """
 Intelligent routing system for download engines
 """
@@ -7,7 +8,7 @@ class EngineRouter:
     """Intelligent routing system for download engines"""
     
     VIDEO_PLATFORMS = [
-        'youtube.com', 'youtu.be', 'tiktok.com', 'instagram.com',
+        'youtube.com', 'youtu.be', 'tiktok.com',
         'twitter.com', 'x.com', 'vimeo.com', 'twitch.tv',
         'facebook.com', 'fb.watch', 'reddit.com', 'dailymotion.com'
     ]

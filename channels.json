@@ -29,6 +29,13 @@
         {"url": "https://www.youtube.com/@Hypeflix.official",        "name": "Hypeflix.official"},
         {"url": "https://www.youtube.com/@Antheape",                 "name": "Antheape"}
     ],
+    "manhwa_flamingo": [
+        {"url": "https://www.youtube.com/@Korasama-v/shorts",          "name": "Korasama-v"},
+        {"url": "https://www.youtube.com/@TRUEMANHUA/shorts",          "name": "TRUEMANHUA"},
+        {"url": "https://www.youtube.com/@5th_Dimension_Manhwa/shorts","name": "5th_Dimension_Manhwa"},
+        {"url": "https://www.youtube.com/@manhwaclash/shorts",         "name": "manhwaclash"},
+        {"url": "https://www.youtube.com/@manhwaaddict13/shorts",      "name": "manhwaaddict13"}
+    ],
     "batch_25": [
         {"url": "https://www.youtube.com/@FrameLegion/shorts",       "name": "FrameLegion"},
         {"url": "https://www.youtube.com/@roebutt/shorts",           "name": "roebutt"},

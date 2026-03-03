@@ -97,16 +97,15 @@ class PlaywrightEngine:
         content_type = response.headers.get('content-type', '').lower()
         
         # Media type detection
-        media_extensions = ['.mp4', '.mkv', '.avi', '.mov', '.webm', '.m3u8', 
-                          '.pdf', '.zip', '.rar', '.jpg', '.png', '.gif']
-        
-        media_content_types = ['video/', 'audio/', 'application/pdf', 
-                              'application/zip', 'image/']
-        
+        # Strict Video Filtering
         is_media = (
-            any(ext in url.lower() for ext in media_extensions) or
-            any(ct in content_type for ct in media_content_types)
+            any(ext in url.lower() for ext in ['.mp4', '.mkv', '.webm', '.m3u8']) or
+            any(ct in content_type for ct in ['video/', 'application/x-mpegURL'])
         )
+        
+        # Ignore common non-video assets explicitly
+        if any(ext in url.lower() for ext in ['.jpg', '.png', '.gif', '.svg', '.css', '.js', '.woff']):
+             is_media = False
         
         if is_media and response.status == 200:
             size = response.headers.get('content-length', 'Unknown')

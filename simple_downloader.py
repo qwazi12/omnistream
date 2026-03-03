@@ -16,12 +16,17 @@ import random
 from typing import Tuple
 from fake_useragent import UserAgent
 from database import get_history
+from config_loader import get_folder_id as _get_folder_id
+
+_DEFAULT_FOLDER = _get_folder_id('movie_clips', '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo')
+
 
 class SimplifiedDownloader:
-    def __init__(self, drive_api=None, log_callback=None):
+    def __init__(self, drive_api=None, log_callback=None, base_folder_id=None):
         self.drive_api = drive_api
         self.log_callback = log_callback
         self.ua = UserAgent()
+        self.base_folder_id = base_folder_id or _DEFAULT_FOLDER
     
     def log(self, message, level="INFO"):
         """Log message"""
@@ -65,42 +70,41 @@ class SimplifiedDownloader:
                     elif '/@' in info.get('channel_url', ''):
                         channel_info['handle'] = '@' + info.get('channel_url').split('/@')[-1].split('/')[0]
                         
-                    # Target Folder ID check
-                    base_id = '1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18'
-                    yt_folder_id = self.drive_api.find_or_create_folder(["YouTube"], base_id)
+                    # Target Folder ID check (uses configured base folder)
+                    base_id = self.base_folder_id  # Configurable base folder
                     
-                    if yt_folder_id:
-                        potential_names = []
-                        if channel_info.get('handle'): potential_names.append(channel_info['handle'])
-                        if channel_info.get('name'): potential_names.append(channel_info['name'])
-                        if channel_info.get('id'): potential_names.append(channel_info['id'])
-                        
-                        channel_folder_id = self.drive_api.find_or_create_folder(potential_names, yt_folder_id)
-                        
-                        if channel_folder_id:
-                            # Check if file exists in Drive (checking video_id in name is safest)
-                            query = f"name contains '{video_id}' and '{channel_folder_id}' in parents and trashed=false"
-                            results = self.drive_api.service.files().list(q=query, fields='files(id, name)').execute()
-                            if results.get('files'):
-                                existing_file = results['files'][0]['name']
-                                self.log(f"☁️  Skipping: Found in Drive ({existing_file})", "WARNING")
-                                # Add to local DB to sync state
-                                try:
-                                    video_info_db = {
-                                        'video_id': video_id,
-                                        'title': title,
-                                        'channel_name': channel_info.get('name', 'Unknown'),
-                                        'url': info.get('webpage_url') or url,
-                                        'file_path': f"Travis/YouTube/{channel_info.get('name')}/{existing_file}",
-                                        'file_size': 0,
-                                        'platform': 'YouTube',
-                                        'format': 'mp4',
-                                        'duration': 0
-                                    }
-                                    get_history().add_to_history(video_info_db)
-                                except: pass
-                                
-                                return True, f"Already in Drive: {existing_file}"
+                    # Create channel folder directly under Movie Clips (no platform subfolder)
+                    potential_names = []
+                    if channel_info.get('handle'): potential_names.append(channel_info['handle'])
+                    if channel_info.get('name'): potential_names.append(channel_info['name'])
+                    if channel_info.get('id'): potential_names.append(channel_info['id'])
+                    
+                    channel_folder_id = self.drive_api.find_or_create_folder(potential_names, base_id)
+                    
+                    if channel_folder_id:
+                        # Check if file exists in Drive (checking video_id in name is safest)
+                        query = f"name contains '{video_id}' and '{channel_folder_id}' in parents and trashed=false"
+                        results = self.drive_api.service.files().list(q=query, fields='files(id, name)').execute()
+                        if results.get('files'):
+                            existing_file = results['files'][0]['name']
+                            self.log(f"☁️  Skipping: Found in Drive ({existing_file})", "WARNING")
+                            # Add to local DB to sync state
+                            try:
+                                video_info_db = {
+                                    'video_id': video_id,
+                                    'title': title,
+                                    'channel_name': channel_info.get('name', 'Unknown'),
+                                    'url': info.get('webpage_url') or url,
+                                    'file_path': f"Movie Clips/{channel_info.get('name')}/{existing_file}",
+                                    'file_size': 0,
+                                    'platform': 'YouTube',
+                                    'format': 'mp4',
+                                    'duration': 0
+                                }
+                                get_history().add_to_history(video_info_db)
+                            except: pass
+                            
+                            return True, f"Already in Drive: {existing_file}"
         except Exception as e:
             # self.log(f"Pre-check failed: {e}", "DEBUG")
             pass
@@ -119,11 +123,12 @@ class SimplifiedDownloader:
              out_tmpl = os.path.join(temp_dir, '%(title)s_%(id)s.%(ext)s')
 
         ydl_opts = {
-            'format': 'bestvideo+bestaudio/best',  # Merged MP4
-            'merge_output_format': 'mp4',
+            # Safest option for Shorts: just get best single file
+            'format': 'best',
             'outtmpl': out_tmpl,
             'no_warnings': True,
             'ignoreerrors': True,
+            'check_formats': False,
             'http_headers': {
                 'User-Agent': self.ua.random,
             }
@@ -185,25 +190,26 @@ class SimplifiedDownloader:
                 # STEP 4: Upload to Drive (Using Smart Merge)
                 if self.drive_api:
                     # Find downloaded file
+                    VIDEO_EXTS = ('.mp4', '.webm', '.mkv', '.mov', '.m4v')
                     downloaded_file = None
                     for file in os.listdir(temp_dir):
-                        if file.endswith('.mp4'):
+                        if file.endswith(VIDEO_EXTS):
                             downloaded_file = os.path.join(temp_dir, file)
                             break
-                    
+
                     if not downloaded_file:
-                        self.log("Error: No MP4 file found", "ERROR")
+                        self.log("Error: No video file found in temp dir", "ERROR")
                         shutil.rmtree(temp_dir, ignore_errors=True)
-                        return False, "No MP4 file found"
+                        return False, "No video file found"
                     
                     self.log(f"📤 Uploading to Google Drive...")
                     
-                    # Upload to Travis/[Platform]/[Smart Channel Folder]
-                    result = self.drive_api.upload_file(
+                    # Upload to configured base folder/[Smart Channel Folder]
+                    result = self.drive_api.upload_with_channel(
                         file_path=downloaded_file,
                         channel_info=channel_info,
-                        base_folder_id='1DQDRFQtl7fkgyXoP-sqRENau2WCLJH18',  # YOUR Travis folder
-                        platform=platform  # Pass platform for folder organization
+                        base_folder_id=self.base_folder_id,
+                        platform=platform
                     )
                     
                     if result:
@@ -223,7 +229,7 @@ class SimplifiedDownloader:
                                 'url': info.get('webpage_url') or url,
                                 'file_path': f"Travis/YouTube/{channel_info.get('name')}/{os.path.basename(downloaded_file)}",
                                 'file_size': os.path.getsize(downloaded_file) if os.path.exists(downloaded_file) else 0,
-                                'platform': 'YouTube',
+                                'platform': platform,
                                 'format': info.get('ext'),
                                 'duration': info.get('duration')
                             }

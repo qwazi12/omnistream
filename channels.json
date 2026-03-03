@@ -1,0 +1,43 @@
+{
+    "movie_clips": [
+        {"url": "https://www.youtube.com/@CoruscateCuts/shorts",     "name": "CoruscateCuts"},
+        {"url": "https://www.youtube.com/@comet-cinema/shorts",      "name": "comet-cinema"},
+        {"url": "https://www.youtube.com/@hanganhoang3071/shorts",   "name": "hanganhoang3071"},
+        {"url": "https://www.youtube.com/@clipscav/shorts",          "name": "clipscav"},
+        {"url": "https://www.youtube.com/@SceneVale/shorts",         "name": "SceneVale"},
+        {"url": "https://www.youtube.com/@QianaLucy/shorts",         "name": "QianaLucy"},
+        {"url": "https://www.youtube.com/@TheUsJournal17/shorts",    "name": "TheUsJournal17"},
+        {"url": "https://www.youtube.com/@HypeCuts-l4u/shorts",      "name": "HypeCuts-l4u"}
+    ],
+    "flamingo": [
+        {"url": "https://www.youtube.com/@mikemakemegreat",                    "name": "mikemakemegreat"},
+        {"url": "https://www.youtube.com/@aliensimulation",                    "name": "aliensimulation"},
+        {"url": "https://www.youtube.com/@televisionShell/shorts",             "name": "televisionShell"},
+        {"url": "https://www.youtube.com/@CartmanBroOfficial/shorts",          "name": "CartmanBroOfficial"},
+        {"url": "https://www.youtube.com/@RegularShowClipsAwesome/shorts",     "name": "RegularShowClipsAwesome"},
+        {"url": "https://www.youtube.com/@BeyondTheFrames-e8m/shorts",         "name": "BeyondTheFrames-e8m"},
+        {"url": "https://www.youtube.com/@roronoaa_7/shorts",                  "name": "roronoaa_7"},
+        {"url": "https://www.youtube.com/@Chicken_Moments",                    "name": "Chicken_Moments"},
+        {"url": "https://www.youtube.com/@FrysFuturisticShorts",               "name": "FrysFuturisticShorts"},
+        {"url": "https://www.youtube.com/@Eternal_DB/shorts",                  "name": "Eternal_DB"},
+        {"url": "https://www.youtube.com/@UnboxingBrosph/shorts",              "name": "UnboxingBrosph"},
+        {"url": "https://www.youtube.com/@raj-s6i2p/shorts",                   "name": "raj-s6i2p"},
+        {"url": "https://www.youtube.com/@TonyPino666/shorts",                 "name": "TonyPino666"}
+    ],
+    "second_track_clips": [
+        {"url": "https://www.youtube.com/@JaiceNoir/shorts",         "name": "JaiceNoir"},
+        {"url": "https://www.youtube.com/@Hypeflix.official",        "name": "Hypeflix.official"},
+        {"url": "https://www.youtube.com/@Antheape",                 "name": "Antheape"}
+    ],
+    "batch_25": [
+        {"url": "https://www.youtube.com/@FrameLegion/shorts",       "name": "FrameLegion"},
+        {"url": "https://www.youtube.com/@roebutt/shorts",           "name": "roebutt"},
+        {"url": "https://www.youtube.com/@comet-cinema/shorts",      "name": "comet-cinema"},
+        {"url": "https://www.youtube.com/@hanganhoang3071/shorts",   "name": "hanganhoang3071"},
+        {"url": "https://www.youtube.com/@clipscav/shorts",          "name": "clipscav"},
+        {"url": "https://www.youtube.com/@SceneVale/shorts",         "name": "SceneVale"},
+        {"url": "https://www.youtube.com/@QianaLucy/shorts",         "name": "QianaLucy"},
+        {"url": "https://www.youtube.com/@TheUsJournal17/shorts",    "name": "TheUsJournal17"},
+        {"url": "https://www.youtube.com/@dennis_851/shorts",        "name": "dennis_851"}
+    ]
+}

@@ -133,42 +133,59 @@ class GoogleDriveAPI:
         
         return current_folder_id
     
-    def find_or_create_folder(self, parent_id: str, folder_name: str) -> Optional[str]:
+    def find_or_create_folder(self, folder_names_or_parent_id, parent_id_or_name=None) -> Optional[str]:
         """
-        Find or create a folder within parent
-        
-        Args:
-            parent_id: Parent folder ID
-            folder_name: Name of folder to find/create
-        
+        Find or create a folder.  Supports two call styles for backwards compat:
+
+        New style (smart multi-name merge, from SimpleDriveAPI):
+            find_or_create_folder(["@Handle", "Display Name", "ID"], parent_id)
+
+        Old style (single name):
+            find_or_create_folder(parent_id_str, folder_name_str)
+
         Returns:
             Folder ID or None on error
         """
-        # Search for existing folder
+        if isinstance(folder_names_or_parent_id, list):
+            # New API: find_or_create_folder(names_list, parent_id)
+            folder_names = [n for n in folder_names_or_parent_id if n]
+            parent_id = parent_id_or_name
+        else:
+            # Old API: find_or_create_folder(parent_id, folder_name)
+            parent_id = folder_names_or_parent_id
+            folder_names = [parent_id_or_name] if parent_id_or_name else []
+
+        if not folder_names or not parent_id:
+            return None
+
+        # Build OR query for any matching name
+        escaped = [n.replace("'", "\\'") for n in folder_names]
+        name_clause = ' or '.join(f"name = '{n}'" for n in escaped)
         query = (
-            f"name='{folder_name}' and "
+            f"({name_clause}) and "
             f"'{parent_id}' in parents and "
             f"mimeType='application/vnd.google-apps.folder' and "
             f"trashed=false"
         )
-        
+
         try:
             results = self.service.files().list(
                 q=query,
                 spaces='drive',
                 fields='files(id, name)',
+                pageSize=1,
                 includeItemsFromAllDrives=True,
                 supportsAllDrives=True
             ).execute()
-            
+
             files = results.get('files', [])
-            
             if files:
                 return files[0].get('id')
-            
-            # Create folder if not found
+
+            # Create using the primary (first) name
+            primary_name = folder_names[0]
             folder_metadata = {
-                'name': folder_name,
+                'name': primary_name,
                 'mimeType': 'application/vnd.google-apps.folder',
                 'parents': [parent_id]
             }
@@ -177,12 +194,51 @@ class GoogleDriveAPI:
                 fields='id',
                 supportsAllDrives=True
             ).execute()
+            print(f"✓ Created folder: {primary_name}")
             return folder.get('id')
-        
+
         except HttpError as e:
-            print(f"[ERROR] Failed to create folder '{folder_name}': {e}")
+            print(f"[ERROR] Failed to find/create folder: {e}")
             return None
-    
+
+    def upload_with_channel(self, file_path: str, channel_info: dict, base_folder_id: str, platform: str = 'YouTube') -> Optional[Dict]:
+        """
+        Upload a file using smart channel-folder creation.
+
+        Mirrors the old SimpleDriveAPI.upload_file() signature so callers
+        that previously used SimpleDriveAPI can be updated to use this.
+
+        Args:
+            file_path: Local file path
+            channel_info: Dict with keys 'handle', 'name', 'id'
+            base_folder_id: ID of the base Drive folder (e.g. Movie Clips)
+            platform: Used for logging only
+
+        Returns:
+            File metadata dict or None on error
+        """
+        try:
+            potential_names = []
+            if channel_info.get('handle'):
+                potential_names.append(channel_info['handle'])
+            if channel_info.get('name'):
+                potential_names.append(channel_info['name'])
+            if channel_info.get('id'):
+                potential_names.append(channel_info['id'])
+
+            channel_folder_id = self.find_or_create_folder(potential_names, base_folder_id)
+            if not channel_folder_id:
+                return None
+
+            folder_label = f"{potential_names[0] if potential_names else 'Unknown'}"
+            print(f"Uploading: {os.path.basename(file_path)} → {folder_label} [{platform}]")
+            return self.upload_file(file_path, channel_folder_id)
+
+        except Exception as e:
+            print(f"[ERROR] upload_with_channel failed: {e}")
+            return None
+
+
     def upload_file(self, file_path: str, folder_id: str, filename: Optional[str] = None) -> Optional[Dict]:
         """
         Upload file to Google Drive

@@ -9,7 +9,7 @@ import json
 from datetime import datetime
 from typing import List, Dict, Optional
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 
 
 class SheetsManager:
@@ -91,8 +91,8 @@ class SheetsManager:
                 print("4. Download credentials as service_account.json")
                 return False
             
-            creds = ServiceAccountCredentials.from_json_keyfile_name(
-                self.credentials_file, scope
+            creds = Credentials.from_service_account_file(
+                self.credentials_file, scopes=scope
             )
             client = gspread.authorize(creds)
             
@@ -283,8 +283,8 @@ class SheetsManager:
                 'https://spreadsheets.google.com/feeds',
                 'https://www.googleapis.com/auth/drive'
             ]
-            creds = ServiceAccountCredentials.from_json_keyfile_name(
-                self.credentials_file, scope
+            creds = Credentials.from_service_account_file(
+                self.credentials_file, scopes=scope
             )
             client = gspread.authorize(creds)
             

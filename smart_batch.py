@@ -250,7 +250,8 @@ def main():
         
     channel_url = sys.argv[1]
     max_videos = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None  # Default to unlimited
-    folder_id = sys.argv[3] if len(sys.argv) > 3 else '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo'  # Default: Movie Clips
+    from config_loader import get_folder_id
+    folder_id = sys.argv[3] if len(sys.argv) > 3 else get_folder_id('movie_clips', '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo')
     
     print("="*70)
     print("OmniStream - Smart Batch (Hybrid)")

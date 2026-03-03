@@ -61,7 +61,8 @@ def download_10downloader(video_url, drive_api, folder_id):
 
         # Upload to Drive.
         if not folder_id:
-            folder_id = '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo'  # Default: Movie Clips
+            from config_loader import get_folder_id
+            folder_id = get_folder_id('movie_clips', '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo')
 
         print(f"📤 Uploading to Drive ({folder_id})...")
         display_name = f"short_{int(time.time())}.mp4"

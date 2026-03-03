@@ -11,13 +11,14 @@ import random
 from TikTokApi import TikTokApi
 from simple_drive import SimpleDriveAPI
 from simple_downloader import SimplifiedDownloader
+from config_loader import get_folder_id
 
 
 class TikTokEngine:
     """Dedicated TikTok download engine with anti-detection"""
-    
+
     def __init__(self, folder_id=None):
-        self.folder_id = folder_id or '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo'
+        self.folder_id = folder_id or get_folder_id('movie_clips', '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo')
         try:
             self.drive_api = SimpleDriveAPI()
         except:
@@ -177,10 +178,8 @@ class TikTokEngine:
                     if downloaded_file and self.drive_api:
                         print(f"   📤 Uploading to Drive via Engine...")
                         try:
-                            # TODO: SimplifiedDownloader has no _get_or_create_drive_folder.
-                            # Upload directly to the configured base folder for now.
                             file_name = os.path.basename(downloaded_file)
-                            self.drive_api.upload_file(
+                            self.drive_api.upload_with_channel(
                                 file_path=downloaded_file,
                                 channel_info={'name': url.split('@')[-1].split('/')[0]},
                                 base_folder_id=self.folder_id,

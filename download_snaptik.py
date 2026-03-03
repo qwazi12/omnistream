@@ -51,7 +51,8 @@ def download_snaptik_direct(video_url, drive_api=None):
         print(f"✓ Saved to temp: {tmp_path}")
 
         # Upload to Drive.
-        folder_id = '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo'  # Default: Movie Clips
+        from config_loader import get_folder_id
+        folder_id = get_folder_id('movie_clips', '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo')
         display_name = f"tiktok_{int(time.time())}.mp4"
 
         if drive_api:

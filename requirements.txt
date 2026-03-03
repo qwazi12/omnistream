@@ -17,11 +17,6 @@ google-auth-oauthlib>=1.1.0
 google-generativeai>=0.8.0    # used by ai_assistant.py and metadata_generator.py
 gspread>=5.0.0
 
-# ── Deprecated but still actively used in sheets_manager.py ───────────────
-# TODO: migrate sheets_manager.py to google-auth + google-api-python-client
-#       then remove this line.
-oauth2client>=4.1.3
-
 # ── Environment ───────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 

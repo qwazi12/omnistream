@@ -25,9 +25,8 @@ def extract_standard(channel_url, max_videos=None):
     print(f"⚡ Trying Fast Extraction: {channel_url}")
     
     urls_to_try = [
-        channel_url + '/videos' if not '/videos' in channel_url else channel_url,
-        channel_url.replace('/shorts', '/videos'),
-        channel_url,
+        channel_url.rstrip('/') + '/shorts',  # Priority 1: Force Shorts tab
+        channel_url,                          # Priority 2: As provided
     ]
     
     for try_url in urls_to_try:
@@ -67,10 +66,13 @@ def extract_standard(channel_url, max_videos=None):
     print("  ✗ Fast extraction yielded no results (or anti-bot blocked)")
     return []
 
-def extract_browser(channel_url, max_videos=100):
+def extract_browser(channel_url, max_videos=None):
     """Browser-based extraction using Playwright (Smart)"""
     if not PLAYWRIGHT_AVAILABLE:
         return []
+    
+    # Handle None (unlimited) by setting a very high limit
+    effective_limit = max_videos if max_videos is not None else 9999
         
     print(f"\n🧠 Switch to Browser Engine applied: {channel_url}")
     print("  Launching headless browser... (this takes a few seconds)")
@@ -144,10 +146,10 @@ def extract_browser(channel_url, max_videos=100):
             last_count = 0
             retries = 0
             
-            print(f"  Scanning for videos (Goal: {max_videos})...")
+            print(f"  Scanning for videos (Goal: {'All' if max_videos is None else max_videos})...")
             
             # We increase retries/buffer since we might discard many retweets
-            while len(videos) < max_videos and retries < 15:
+            while len(videos) < effective_limit and retries < 15:
                 # Scroll down
                 page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                 time.sleep(3)  # Wait for load
@@ -239,15 +241,16 @@ def extract_browser(channel_url, max_videos=100):
         return []
         
     print(f"  ✓ Browser engine found {len(videos)} videos")
-    return videos[:max_videos]
+    return videos if max_videos is None else videos[:max_videos]
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python smart_batch.py <channel_url> [max_videos]")
+        print("Usage: python smart_batch.py <channel_url> [max_videos] [folder_id]")
         return 1
         
     channel_url = sys.argv[1]
-    max_videos = int(sys.argv[2]) if len(sys.argv) > 2 else 40 # Default to 40
+    max_videos = int(sys.argv[2]) if len(sys.argv) > 2 and sys.argv[2].isdigit() else None  # Default to unlimited
+    folder_id = sys.argv[3] if len(sys.argv) > 3 else '1kuOKRQQRL0ws5aOVqwkdUzdnfj5KQGjo'  # Default: Movie Clips
     
     print("="*70)
     print("OmniStream - Smart Batch (Hybrid)")
@@ -274,7 +277,7 @@ def main():
     except:
         drive_api = None
         
-    downloader = SimplifiedDownloader(drive_api=drive_api)
+    downloader = SimplifiedDownloader(drive_api=drive_api, base_folder_id=folder_id)
     
     successful = 0
     failed = 0
@@ -283,35 +286,62 @@ def main():
         print(f"\n[{i}/{len(video_urls)}] {url}")
         success, msg = downloader.download(url)
         if success:
+            print(f"  ✓ [Engine: standard yt-dlp] {msg}")
             successful += 1
         else:
-            # Fallback: Try Browser Engine
+            # ── FALLBACK 1: Playwright browser engine ─────────────────────────
             if PLAYWRIGHT_AVAILABLE:
-                print(f"  ⚠️ Standard download failed. Trying Browser Fallback...")
+                print(f"  ⚠️ Standard download failed ({msg}). Trying Browser Fallback...")
                 try:
-                    # Lazy import to avoid circular dependencies if any (though unlikely here)
                     from playwright_engine import PlaywrightEngine
-                    
-                    # Create a temp output path for the browser engine to work in
-                    # We use the current directory or a temp one, PlaywrightEngine handles cleanup/upload
-                    # But PlaywrightEngine requires an output_path in __init__
-                    
-                    # We'll use a temp dir for the engine
                     import tempfile
                     with tempfile.TemporaryDirectory() as temp_dir:
-                         pw_engine = PlaywrightEngine(output_path=temp_dir)
-                         pw_success, pw_msg = pw_engine.download(url)
-                         
-                         if pw_success:
-                             print(f"  ✓ Browser Fallback Successful: {pw_msg}")
-                             successful += 1
-                         else:
-                             print(f"  ✗ Browser Fallback Failed: {pw_msg}")
-                             failed += 1
+                        pw_engine = PlaywrightEngine(output_path=temp_dir)
+                        pw_success, pw_msg = pw_engine.download(url)
+
+                        if pw_success:
+                            print(f"  ✓ [Engine: playwright] {pw_msg}")
+                            successful += 1
+                        else:
+                            # ── FALLBACK 2 & 3: platform-specific bypasses ─────
+                            # Only reached when BOTH standard and Playwright failed.
+                            print(f"  ✗ Browser Fallback Failed: {pw_msg}")
+                            bypass_success = False
+
+                            if 'tiktok.com' in url:
+                                print(f"  ⚠️ Trying Snaptik Bypass (TikTok)...")
+                                try:
+                                    from download_snaptik import download_snaptik_direct
+                                    if download_snaptik_direct(url, drive_api):
+                                        print(f"  ✓ [Engine: snaptik] success")
+                                        successful += 1
+                                        bypass_success = True
+                                    else:
+                                        print(f"  ✗ Snaptik Bypass Failed")
+                                except Exception as e:
+                                    print(f"  ✗ Snaptik Error: {e}")
+
+                            elif 'youtube.com' in url or 'youtu.be' in url:
+                                print(f"  ⚠️ Trying Web Bypass / 10Downloader (YouTube)...")
+                                try:
+                                    from download_cobalt import download_cobalt_direct
+                                    if download_cobalt_direct(url, drive_api, folder_id):
+                                        print(f"  ✓ [Engine: cobalt/10dl] success")
+                                        successful += 1
+                                        bypass_success = True
+                                    else:
+                                        print(f"  ✗ Web Bypass Failed")
+                                except Exception as e:
+                                    print(f"  ✗ Web Bypass Error: {e}")
+
+                            if not bypass_success:
+                                failed += 1
+
                 except Exception as e:
-                     print(f"  ✗ Browser Fallback Error: {e}")
-                     failed += 1
+                    print(f"  ✗ Browser Fallback Error: {e}")
+                    failed += 1
             else:
+                print(f"  ✗ Failed (Playwright not available): {msg}")
                 failed += 1
             
     print(f"\nCompleted: {successful} success, {failed} failed")

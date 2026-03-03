@@ -95,6 +95,9 @@ Instagramcookies.txt
 reel_urls_*.txt
 urls.txt
 *.pickle
+*.bak
+*.bak.*
+failed_videos.txt
 
 # Downloaded content
 downloads/

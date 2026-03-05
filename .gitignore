@@ -68,6 +68,7 @@ service_account.json
 # Database files
 omnistream_history.db
 videos.db
+*.db-*
 
 # Cookies
 cookies.txt

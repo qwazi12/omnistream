@@ -123,12 +123,16 @@ class SimplifiedDownloader:
              out_tmpl = os.path.join(temp_dir, '%(title)s_%(id)s.%(ext)s')
 
         ydl_opts = {
-            # Safest option for Shorts: just get best single file
-            'format': 'best',
+            # Prefer non-HLS mp4 for Shorts; fall back to merging best video+audio via ffmpeg
+            'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/bestvideo+bestaudio/best',
+            'merge_output_format': 'mp4',
             'outtmpl': out_tmpl,
             'no_warnings': True,
             'ignoreerrors': True,
             'check_formats': False,
+            # Light sleep between video downloads (not per-request, which was too slow)
+            'sleep_interval': 2,
+            'max_sleep_interval': 5,
             'http_headers': {
                 'User-Agent': self.ua.random,
             }

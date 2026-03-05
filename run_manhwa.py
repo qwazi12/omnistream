@@ -101,7 +101,8 @@ def main():
     print("=" * 70)
 
     try:
-        drive_api = GoogleDriveAPI()
+        # Force OAuth mode — service accounts have no storage quota on personal Drive
+        drive_api = GoogleDriveAPI(service_account_file='__disabled__')
     except Exception as e:
         print(f"❌ Drive API init failed: {e}")
         sys.exit(1)
